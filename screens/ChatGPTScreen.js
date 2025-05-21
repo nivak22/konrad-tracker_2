@@ -1,26 +1,27 @@
 // screens/ChatScreen.js
-import React, { useState, useRef, useEffect } from 'react'; // Asegúrate de tener useEffect si lo necesitas para algo más
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   TextInput,
-  Button, // Mantendremos tu Button por ahora, pero lo estilizaremos
+  Button,
   Text,
-  ScrollView, // Mantendremos ScrollView como en tu original
+  ScrollView,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  TouchableOpacity, // Para el botón de enviar personalizado
-  SafeAreaView, // Para un mejor layout en iOS
-  ActivityIndicator, // Si quieres añadir un indicador de carga mientras responde la IA
+  TouchableOpacity,
+  SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Para el ícono del botón de enviar
+import { Ionicons } from '@expo/vector-icons';
 
-// ⛔ API KEY directa — solo para pruebas ⚠️ (Tu lógica original)
-const OPENAI_API_KEY = 'TU_API_KEY_AQUI';
+// ⛔ API KEY directa — solo para pruebas ⚠️
+// Asegúrate de que esta KEY sea válida y tenga los permisos necesarios.
+// Considera moverla a un backend para producción.
+const OPENAI_API_KEY = '';
 
 // Colores del Manual de Marca adaptados para un look futurista
-// (Los mismos que en la versión anterior que te gustó, para consistencia)
 const BRAND_COLORS = {
   primary: "#1ABC9C",
   secondary: "#00BFFF",
@@ -48,11 +49,11 @@ const BRAND_COLORS = {
   headerTitleColor: "#2C3E50",
 };
 
-// Componente para cada burbuja de mensaje (solo estilos, sin lógica de animación de entrada por ahora para mantenerlo simple)
+// Componente para cada burbuja de mensaje
 const MessageBubble = React.memo(({ message }) => {
   const isUser = message.role === 'user';
 
-  const formatTimestamp = (date) => { // Asumimos que podrías añadir timestamps luego
+  const formatTimestamp = (date) => {
     if (!date) return '';
     const d = date instanceof Date ? date : new Date(date);
     return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -80,11 +81,10 @@ const MessageBubble = React.memo(({ message }) => {
           <Text style={isUser ? styles.userMessageText : styles.assistantMessageText}>
             {message.content}
           </Text>
-          {/* Podrías añadir un timestamp aquí si lo incluyes en tus objetos de mensaje */}
           {/* {message.timestamp && (
-             <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.assistantTimestamp]}>
-               {formatTimestamp(message.timestamp)}
-             </Text>
+            <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.assistantTimestamp]}>
+              {formatTimestamp(message.timestamp)}
+            </Text>
           )} */}
         </View>
       </View>
@@ -96,39 +96,33 @@ const MessageBubble = React.memo(({ message }) => {
 const ChatScreen = () => {
   const [userMessage, setUserMessage] = useState('');
   const [messages, setMessages] = useState([
-    // Mensaje de bienvenida inicial si lo deseas (opcional, puedes quitarlo)
     { role: 'assistant', content: '¡Hola! Soy tu Asistente de Hábitos. ¿En qué puedo ayudarte hoy?', id: 'initial-assistant-msg' }
   ]);
   const scrollViewRef = useRef();
-  const [isLoading, setIsLoading] = useState(false); // Para el indicador de carga
+  const [isLoading, setIsLoading] = useState(false);
 
-  // TU LÓGICA ORIGINAL DE handleSend (SIN CAMBIOS)
   const handleSend = async () => {
     if (!userMessage.trim()) return;
 
-    const newMessages = [...messages, { role: 'user', content: userMessage, id: Math.random().toString() }]; // Añadido id para key en map
+    const newMessages = [...messages, { role: 'user', content: userMessage, id: Math.random().toString() }];
     setMessages(newMessages);
-    const currentInput = userMessage; // Guardar el mensaje actual antes de limpiar
-    setUserMessage(''); // Limpiar input inmediatamente
-    setIsLoading(true); // Activar indicador de carga
+    // const currentInput = userMessage; // No es necesario si usas newMessages directamente
+    setUserMessage('');
+    setIsLoading(true);
 
     try {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: {
-          // 'Authorization': `Bearer ${OPENAI_API_KEY}`, // Tu API Key
+          'Authorization': `Bearer ${OPENAI_API_KEY}`, // ✅ LÍNEA DESCOMENTADA
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: "gpt-3.5-turbo",
           messages: [
             { role: "system", content: "Responde únicamente dudas relacionadas con hábitos saludables y desarrollo personal. Si te preguntan algo fuera de ese tema, indica amablemente que solo respondes sobre hábitos." },
-            // Mapear newMessages para la API, pero solo los que tienen role y content
+            // Mapear newMessages para la API
             ...newMessages.filter(m => m.role && m.content).map(m => ({ role: m.role, content: m.content })),
-            // El mensaje del usuario actual ya está en newMessages, pero la API lo espera explícitamente a veces.
-            // Si tu estructura de newMessages ya es correcta para la API, puedes simplificar.
-            // Esta línea es redundante si currentInput ya está en newMessages como el último elemento.
-            // { role: "user", content: currentInput } 
           ]
         })
       });
@@ -136,20 +130,22 @@ const ChatScreen = () => {
       const data = await response.json();
       console.log('Respuesta completa:', data);
 
-      const assistantMessageContent = data.choices?.[0]?.message?.content || 'No se pudo obtener respuesta de la IA.';
-      
-      // Usar un callback en setMessages para asegurar que se usa el estado más reciente
-      setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: assistantMessageContent, id: Math.random().toString() }]);
+      if (data.error) { // Manejo de errores devueltos por la API de OpenAI
+        console.error('Error de la API de OpenAI:', data.error.message);
+        setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: `Error de la API: ${data.error.message || 'Error desconocido'}`, id: Math.random().toString() }]);
+      } else {
+        const assistantMessageContent = data.choices?.[0]?.message?.content || 'No se pudo obtener respuesta de la IA.';
+        setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: assistantMessageContent, id: Math.random().toString() }]);
+      }
       Keyboard.dismiss();
 
     } catch (error) {
-      console.error('Error consultando OpenAI:', error);
+      console.error('Error consultando OpenAI (catch):', error); // Más específico para el bloque catch
       setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: 'Hubo un error al contactar al asistente. Intenta de nuevo.', id: Math.random().toString() }]);
     } finally {
-      setIsLoading(false); // Desactivar indicador de carga
+      setIsLoading(false);
     }
   };
-  // FIN DE TU LÓGICA ORIGINAL
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -159,7 +155,7 @@ const ChatScreen = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0} // Ajustar según altura del header
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
       >
         <View style={styles.mainContainer}>
           <ScrollView
@@ -167,12 +163,10 @@ const ChatScreen = () => {
             contentContainerStyle={styles.chatMessagesContent}
             ref={scrollViewRef}
             onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-            onLayout={() => scrollViewRef.current?.scrollToEnd({ animated: true })} // Para asegurar scroll al inicio
+            onLayout={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
             showsVerticalScrollIndicator={false}
           >
             {messages.map((msg, i) => (
-              // Usando el componente MessageBubble para el estilo
-              // Necesitas un 'key'. Si tus mensajes no tienen id, puedes usar el índice, pero un id único es mejor.
               <MessageBubble key={msg.id || i} message={msg} />
             ))}
             {isLoading && (
@@ -192,7 +186,7 @@ const ChatScreen = () => {
               onChangeText={setUserMessage}
               multiline
               maxHeight={100}
-              editable={!isLoading} // No permitir editar mientras carga
+              editable={!isLoading}
             />
             <TouchableOpacity
               style={[styles.sendIconContainer, (!userMessage.trim() || isLoading) && styles.sendButtonDisabled]}
@@ -228,11 +222,11 @@ const styles = StyleSheet.create({
     color: BRAND_COLORS.headerTitleColor,
     textAlign: 'center',
   },
-  mainContainer: { // Reemplaza tu 'container' original
+  mainContainer: {
     flex: 1,
     backgroundColor: BRAND_COLORS.chatScreenBackground,
   },
-  chatMessages: { // Reemplaza tu 'chatBox'
+  chatMessages: {
     flex: 1,
   },
   chatMessagesContent: {
@@ -258,6 +252,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+    // backgroundColor: BRAND_COLORS.assistantAvatarBg, // Si quieres un fondo para el avatar
   },
   userBubbleWrapper: {},
   assistantBubbleWrapper: {
@@ -273,37 +268,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  userBubble: { // Tu estilo original para userText, adaptado
-    backgroundColor: BRAND_COLORS.userBubble, // Usando color de marca
+  userBubble: {
+    backgroundColor: BRAND_COLORS.userBubble,
     borderBottomRightRadius: 4,
   },
-  assistantBubble: { // Tu estilo original para assistantText, adaptado
-    backgroundColor: BRAND_COLORS.assistantBubble, // Usando color de marca
+  assistantBubble: {
+    backgroundColor: BRAND_COLORS.assistantBubble,
     borderBottomLeftRadius: 4,
   },
-  userMessageText: { // Tu estilo original para userText, adaptado
+  userMessageText: {
     fontSize: 15,
-    color: BRAND_COLORS.userBubbleText, // Usando color de marca
+    color: BRAND_COLORS.userBubbleText,
     lineHeight: 21,
   },
-  assistantMessageText: { // Tu estilo original para assistantText, adaptado
+  assistantMessageText: {
     fontSize: 15,
-    color: BRAND_COLORS.assistantBubbleText, // Usando color de marca
+    color: BRAND_COLORS.assistantBubbleText,
     lineHeight: 21,
   },
-  timestamp: { // Estilo para timestamps (si los añades)
+  timestamp: {
     fontSize: 10,
     marginTop: 4,
   },
   userTimestamp: {
-    color: BRAND_COLORS.userBubbleText + 'B3',
+    color: BRAND_COLORS.userBubbleText + 'B3', // Un poco más opaco
     textAlign: 'right',
   },
   assistantTimestamp: {
     color: BRAND_COLORS.timestampText,
     textAlign: 'left',
   },
-  inputArea: { // Reemplaza tu 'inputContainer'
+  inputArea: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -312,18 +307,18 @@ const styles = StyleSheet.create({
     borderTopColor: BRAND_COLORS.inputBorder,
     backgroundColor: BRAND_COLORS.inputAreaBackground,
   },
-  inputField: { // Reemplaza tu 'input'
+  inputField: {
     flex: 1,
-    backgroundColor: BRAND_COLORS.chatScreenBackground,
-    minHeight: 44,
+    backgroundColor: BRAND_COLORS.chatScreenBackground, // Ligeramente diferente para contraste
+    minHeight: 44, // Buena altura para touch
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 22,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8, // Ajuste para padding vertical en Android
+    borderRadius: 22, // Circular
     fontSize: 16,
     color: BRAND_COLORS.textDark,
     marginRight: 10,
   },
-  sendIconContainer: { // Para el nuevo botón de enviar con ícono
+  sendIconContainer: {
     backgroundColor: BRAND_COLORS.sendButton,
     width: 44,
     height: 44,
@@ -331,7 +326,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonDisabled: { // Estilo para cuando el botón está deshabilitado
+  sendButtonDisabled: {
     backgroundColor: BRAND_COLORS.sendButtonDisabled,
   },
   typingIndicatorContainer: {
@@ -339,12 +334,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 15,
-    marginLeft: 40, // Para alinear con burbuja del asistente
+    marginLeft: 40, // Para alinear con burbuja del asistente (avatar width + margin)
   },
   typingIndicatorText: {
     marginLeft: 8,
     fontSize: 13,
-    color: BRAND_COLORS.placeholderText, // Usar un color de placeholder
+    color: BRAND_COLORS.placeholderText,
     fontStyle: 'italic',
   },
 });
